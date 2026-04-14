@@ -66,3 +66,20 @@ description: 平台内容规则——根据消息来源平台（Hermes 部署环
 
 - 规则更新：直接修改本 SKILL.md，永久生效
 - 添加新规则：patch 本文件即可，无需重启
+
+---
+
+## 已知问题
+
+### 微信图片接收问题
+
+**问题描述：** 微信（WeChat）session 中发送图片消息时，图片数据无法正确传递到 Hermes Agent，Hermes 收到的是文字描述而非实际图片文件，导致 vision_analyze 等图片处理工具无法工作。
+
+**现象：**
+- 用户在微信发送图片，Hermes 回复的内容暗示它只看到了文字描述
+- 图片路径在 /tmp/ 下，vision_analyze 工具无法访问（仅支持 ~/.hermes/image_cache/ 和 HTTP URL）
+- Telegram session 无此问题，图片可正常缓存并分析
+
+**临时解决方案：**
+- 将图片发送至 Telegram session，Hermes 会自动缓存到 ~/.hermes/image_cache/ 下进行分析
+- 根本修复需由 Hermes WeChat 接入层处理（可能是图片数据流的编码/转发问题）
