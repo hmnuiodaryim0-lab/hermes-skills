@@ -1,13 +1,13 @@
 ---
 name: travel-research
-description: 旅行目的地深度研究工作流——输入城市名，输出完整旅行研究报告（历史分层/博物馆/古建/考古/美食/路线），并生成信息图。工具链：Brave Search + evolink 出图。
+description: 旅行目的地深度研究工作流——输入城市名，输出完整旅行研究报告（历史分层/博物馆/古建/考古/美食/路线），并生成信息图。支持大陆/海外路线规划：境内调用高德地图（amap skill），境外调用 Google Maps。
 category: productivity
 ---
 
 # 旅行目的地深度研究技能
 
 输入：城市名（或地区名）
-输出：完整 .org 格式旅行研究报告 + 信息图
+输出：完整 .org 格式旅行研究报告 + 路线规划 + 信息图
 
 ---
 
@@ -28,7 +28,27 @@ category: productivity
 
 同时搜索：景点门票/开放时间/交通方式/最佳季节
 
-### 第二步：整理报告结构
+---
+
+### 第二步：判断境内/境外（关键步骤）
+
+**必须执行此步骤来决定后续路线工具。**
+
+用 AMap 地理编码探测目的地：
+
+```bash
+# 在 ~/.hermes/skills/amap/scripts/ 目录下执行
+AMAP_MAPS_API_KEY=$AMAP_MAPS_API_KEY python amap.py geocode --address "{目的城市}" --city "{目的城市}"
+```
+
+检查返回结果：
+
+- **province 字段非空**（包含"省"、"市"、"自治区"等中文行政区划）→ **大陆境内**，路线用高德地图（amap skill）
+- **province 字段为空**或 geocode 失败 → **境外**，路线用 Google Maps（通过 web 搜索获取驾车/公交路线）
+
+---
+
+### 第三步：整理报告结构
 
 按以下大纲组织内容（.org 格式）：
 
@@ -61,12 +81,7 @@ category: productivity
 - 发现意义
 
 * 参观路线
-** 路线一：{主题}（天数）
-1. 景点1
-2. 景点2
-
-** 路线二：{主题}（天数）
-...
+（路线内容根据境内/境外判断，见第四步）
 
 * 美食体系
 ** 必吃清单
@@ -81,7 +96,46 @@ category: productivity
 ** 注意事项
 ```
 
-### 第三步：保存文档
+---
+
+### 第四步：路线规划（境内/境外分支）
+
+#### 境内路线（大陆城市，使用高德地图）
+
+调用 amap skill（`~/.hermes/skills/amap/scripts/amap.py`）：
+
+```bash
+# 地理编码获取坐标
+AMAP_MAPS_API_KEY=$AMAP_MAPS_API_KEY python ~/.hermes/skills/amap/scripts/amap.py geocode --address "{景点A}" --city {城市}
+
+# 驾车路线（坐标模式）
+AMAP_MAPS_API_KEY=$AMAP_MAPS_API_KEY python ~/.hermes/skills/amap/scripts/amap.py drive-route-coords --origin {坐标A} --destination {坐标B}
+
+# 步行路线
+AMAP_MAPS_API_KEY=$AMAP_MAPS_API_KEY python ~/.hermes/skills/amap/scripts/amap.py walk-route-coords --origin {坐标A} --destination {坐标B}
+
+# 公交路线
+AMAP_MAPS_API_KEY=$AMAP_MAPS_API_KEY python ~/.hermes/skills/amap/scripts/amap.py transit-route-coords --origin {坐标A} --destination {坐标B} --city {出发城市} --cityd {目的城市}
+```
+
+将路线结果（距离、耗时、途经道路）填入报告的"参观路线"章节。
+
+#### 境外路线（海外/港澳台，使用 Google Maps）
+
+通过 Brave Search 搜索路线：
+
+```
+{出发地} to {目的地} driving directions Google Maps
+{出发地} to {目的地} public transit directions
+```
+
+或者直接用浏览器工具访问 `https://www.google.com/maps/dir/{出发地}/{目的地}` 获取路线摘要。
+
+将搜索结果中的关键信息（路线距离、预计车程/时长、途经高速公路）填入报告。
+
+---
+
+### 第五步：保存文档
 
 ```bash
 mkdir -p ~/Documents/notes
@@ -89,7 +143,9 @@ path="~/Documents/notes/$(date '+%Y%m%dT%H%M%S')==z--{城市}旅行研究.org"
 # 写入整理好的 org 内容
 ```
 
-### 第四步：生成信息图
+---
+
+### 第六步：生成信息图
 
 用 `nano-banana-2-beta` 生成城市信息图（异步模式）：
 
@@ -106,7 +162,6 @@ curl -X POST https://api.evolink.ai/v1/images/generations \
   }'
 
 # 2. 轮询任务状态（等待约30-60秒）
-# task_id 从上一步获取
 curl -X GET "https://api.evolink.ai/v1/tasks/{task_id}" \
   -H "Authorization: Bearer $EVOLINK_API_KEY"
 
@@ -115,8 +170,20 @@ curl -X GET "https://api.evolink.ai/v1/tasks/{task_id}" \
 
 ---
 
+## 工具依赖
+
+| 工具 | 用途 | 技能 |
+|------|------|------|
+| Brave Search | 城市研究、境外路线搜索 | 内置 web 工具 |
+| amap.py | 大陆境内地理编码、路线规划 | amap skill |
+| Google Maps | 境外路线获取 | Brave Search / 浏览器 |
+| evolink (nano-banana-2-beta) | 信息图生成 | 内置 image_gen |
+
+---
+
 ## 注意事项
 
+- **第二步（境内/境外判断）不可跳过**，路线工具选择取决于此结果
 - 历史分层至少覆盖：古代（旧石器—明清）、近代（晚清—民国）、现代（20世纪后）三个时期
 - 博物馆标注星级（★★★★★ 必去 / ★★★★ 推荐）
 - 路线按主题分类：红色记忆/边境风情/自然风光/深度人文
